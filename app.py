@@ -22,7 +22,7 @@ st.success("TEST: NEW APP.PY IS RUNNING")
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_FILE = BASE_DIR / "health_data.csv"
+DATA_FILE = BASE_DIR / "data/health_data.csv"
 
 
 # ============================================================
@@ -137,7 +137,7 @@ hr {
 
 if not DATA_FILE.exists():
 
-    st.error("❌ health_data.csv was not found.")
+    st.error("❌ data/health_data.csv was not found.")
 
     st.write("HealthMirror is looking for the CSV here:")
 
@@ -165,7 +165,7 @@ try:
 
 except Exception as e:
 
-    st.error("❌ Could not read health_data.csv.")
+    st.error("❌ Could not read data/health_data.csv.")
 
     st.exception(e)
 
