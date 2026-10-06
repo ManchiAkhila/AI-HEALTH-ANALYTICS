@@ -147,12 +147,12 @@ hr {
 # LOAD HEALTH DATA
 # ============================================================
 
-DATA_FILE = "data/health_data.csv"
+DATA_FILE = "health_data.csv"
 
 try:
     data = pd.read_csv(DATA_FILE)
 except FileNotFoundError:
-    st.error("❌ data/health_data.csv was not found.")
+    st.error("❌ health_data.csv was not found.")
     st.stop()
 
 
