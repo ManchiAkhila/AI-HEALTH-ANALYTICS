@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-from io import BytesIO
+from pathlib import Path
 
 
 # ============================================================
@@ -17,30 +17,34 @@ st.set_page_config(
 
 
 # ============================================================
+# FILE PATH
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_FILE = BASE_DIR / "health_data.csv"
+
+
+# ============================================================
 # CSS
 # ============================================================
 
 st.markdown("""
 <style>
 
-/* Main background */
 .stApp {
     background-color: #f7f4ed;
 }
 
-/* Main container */
 .block-container {
     max-width: 1200px;
     padding-top: 2rem;
     padding-bottom: 3rem;
 }
 
-/* Normal text */
 p, label {
     color: #46544c !important;
 }
 
-/* Main headings */
 h1 {
     color: #30483a !important;
     font-size: 42px !important;
@@ -54,7 +58,6 @@ h3 {
     color: #4b6656 !important;
 }
 
-/* Sidebar */
 [data-testid="stSidebar"] {
     background-color: #28332f;
 }
@@ -65,7 +68,6 @@ h3 {
     color: white !important;
 }
 
-/* Metric cards */
 [data-testid="stMetric"] {
     background-color: #fffdf8;
     border: 1px solid #e2ddd2;
@@ -82,7 +84,6 @@ h3 {
     color: #385344 !important;
 }
 
-/* Buttons */
 .stButton > button {
     width: 100%;
     border-radius: 12px;
@@ -98,7 +99,6 @@ h3 {
     border-color: #8ea78e;
 }
 
-/* Form */
 [data-testid="stForm"] {
     background-color: #fffdf8;
     border: 1px solid #e2ddd2;
@@ -106,32 +106,19 @@ h3 {
     padding: 25px;
 }
 
-/* Info / warning boxes */
 [data-testid="stAlert"] {
     border-radius: 14px;
 }
 
-/* Tables */
 [data-testid="stDataFrame"] {
     border: 1px solid #ded8cc;
     border-radius: 15px;
 }
 
-/* Horizontal line */
 hr {
     border-color: #ddd7ca;
 }
 
-/* Cards */
-.card {
-    background-color: #fffdf8;
-    border: 1px solid #e2ddd2;
-    border-radius: 20px;
-    padding: 24px;
-    margin: 10px 0;
-}
-
-/* Footer */
 .footer {
     text-align: center;
     color: #7b857d;
@@ -147,14 +134,46 @@ hr {
 # LOAD HEALTH DATA
 # ============================================================
 
-DATA_FILE = "health_data.csv"
+if not DATA_FILE.exists():
 
-try:
-    data = pd.read_csv(DATA_FILE)
-except FileNotFoundError:
     st.error("❌ health_data.csv was not found.")
+
+    st.write("HealthMirror is looking for the CSV here:")
+
+    st.code(str(DATA_FILE))
+
+    st.write("Files available in the application folder:")
+
+    try:
+        available_files = [
+            file.name
+            for file in BASE_DIR.iterdir()
+        ]
+
+        st.write(available_files)
+
+    except Exception:
+        st.write("Unable to list files.")
+
     st.stop()
 
+
+try:
+
+    data = pd.read_csv(DATA_FILE)
+
+except Exception as e:
+
+    st.error("❌ Could not read health_data.csv.")
+
+    st.exception(e)
+
+    st.stop()
+
+
+# ============================================================
+# REQUIRED COLUMNS
+# ============================================================
 
 required_columns = [
     "date",
@@ -178,16 +197,73 @@ missing = [
 
 
 if missing:
+
     st.error(
-        "Your health_data.csv is missing: "
-        + ", ".join(missing)
+        "❌ Your health_data.csv is missing these columns:"
     )
+
+    st.write(missing)
+
     st.stop()
 
 
-data["date"] = pd.to_datetime(data["date"])
+# ============================================================
+# DATA CLEANING
+# ============================================================
 
-data = data.sort_values("date").reset_index(drop=True)
+try:
+
+    data["date"] = pd.to_datetime(
+        data["date"],
+        errors="coerce"
+    )
+
+    numeric_columns = [
+        "sleep_hours",
+        "water_liters",
+        "food_quality",
+        "activity_minutes",
+        "energy_level",
+        "headache",
+        "pain",
+        "temperature",
+        "heart_rate"
+    ]
+
+    for column in numeric_columns:
+
+        data[column] = pd.to_numeric(
+            data[column],
+            errors="coerce"
+        )
+
+    data = data.dropna(
+        subset=["date"]
+    )
+
+    data = data.fillna(0)
+
+    data = data.sort_values(
+        "date"
+    ).reset_index(drop=True)
+
+except Exception as e:
+
+    st.error("❌ Error while processing health data.")
+
+    st.exception(e)
+
+    st.stop()
+
+
+if data.empty:
+
+    st.error(
+        "❌ health_data.csv does not contain usable health records."
+    )
+
+    st.stop()
+
 
 latest = data.iloc[-1]
 
@@ -216,46 +292,55 @@ patterns = []
 
 
 if latest["sleep_hours"] < baseline["sleep_hours"] - 1:
+
     score += 1
     patterns.append("Low sleep")
 
 
 if latest["water_liters"] < baseline["water_liters"] - 0.5:
+
     score += 1
     patterns.append("Low water intake")
 
 
 if latest["food_quality"] < baseline["food_quality"] - 2:
+
     score += 1
     patterns.append("Lower food quality")
 
 
 if latest["activity_minutes"] < baseline["activity_minutes"] - 15:
+
     score += 1
     patterns.append("Low physical activity")
 
 
 if latest["energy_level"] < baseline["energy_level"] - 2:
+
     score += 1
     patterns.append("Low energy")
 
 
 if latest["temperature"] > baseline["temperature"] + 0.5:
+
     score += 1
     patterns.append("Higher temperature")
 
 
 if latest["heart_rate"] > baseline["heart_rate"] + 15:
+
     score += 1
     patterns.append("Higher heart rate")
 
 
 if latest["headache"] == 1:
+
     score += 1
     patterns.append("Headache")
 
 
 if latest["pain"] > 0:
+
     score += 1
     patterns.append("Pain")
 
@@ -265,15 +350,19 @@ if latest["pain"] > 0:
 # ============================================================
 
 if score == 0:
+
     status = "Normal"
 
 elif score <= 2:
+
     status = "Slight change detected"
 
 elif score <= 4:
+
     status = "Multiple changes detected"
 
 else:
+
     status = "Significant change detected"
 
 
@@ -285,7 +374,9 @@ with st.sidebar:
 
     st.title("❤️ HealthMirror")
 
-    st.caption("Personalized Healthcare Companion")
+    st.caption(
+        "Personalized Healthcare Companion"
+    )
 
     st.divider()
 
@@ -356,33 +447,33 @@ if page == "🏠 Dashboard":
 
     st.divider()
 
-    # --------------------------------------------------------
-    # BASELINE
-    # --------------------------------------------------------
-
     st.header("📊 Personal Health Baseline")
 
     c1, c2, c3, c4 = st.columns(4)
 
     with c1:
+
         st.metric(
             "💤 Sleep",
             f"{baseline['sleep_hours']:.1f} hrs"
         )
 
     with c2:
+
         st.metric(
             "💧 Water",
             f"{baseline['water_liters']:.2f} L"
         )
 
     with c3:
+
         st.metric(
             "⚡ Energy",
             f"{baseline['energy_level']:.1f}/10"
         )
 
     with c4:
+
         st.metric(
             "❤️ Heart Rate",
             f"{baseline['heart_rate']:.1f} bpm"
@@ -390,21 +481,19 @@ if page == "🏠 Dashboard":
 
     st.divider()
 
-    # --------------------------------------------------------
-    # PATTERN ANALYSIS
-    # --------------------------------------------------------
-
     st.header("🔎 Health Pattern Analysis")
 
     c1, c2 = st.columns(2)
 
     with c1:
+
         st.metric(
             "Pattern Score",
             score
         )
 
     with c2:
+
         st.metric(
             "Current Status",
             status
@@ -438,26 +527,21 @@ if page == "🏠 Dashboard":
             "personal baseline were detected."
         )
 
-    # --------------------------------------------------------
-    # DETECTED CHANGES
-    # --------------------------------------------------------
-
     st.subheader("Detected Changes")
 
     if patterns:
 
         for pattern in patterns:
-            st.warning("• " + pattern)
+
+            st.warning(
+                "• " + pattern
+            )
 
     else:
 
         st.success(
             "✓ No unusual changes detected."
         )
-
-    # --------------------------------------------------------
-    # PERSONALIZED INSIGHT
-    # --------------------------------------------------------
 
     st.header("💡 Personalized Health Insight")
 
@@ -495,17 +579,15 @@ if page == "🏠 Dashboard":
             "medical advice."
         )
 
-    # --------------------------------------------------------
-    # HEALTH TRENDS
-    # --------------------------------------------------------
-
     st.divider()
 
     st.header("📈 Health Trends")
 
     chart_data = data.copy()
 
-    chart_data["Day"] = chart_data["date"].dt.strftime("%d %b")
+    chart_data["Day"] = chart_data[
+        "date"
+    ].dt.strftime("%d %b")
 
     chart_data = chart_data.set_index("Day")
 
@@ -544,10 +626,6 @@ if page == "🏠 Dashboard":
         st.line_chart(
             chart_data["heart_rate"]
         )
-
-    # --------------------------------------------------------
-    # HEALTH HISTORY
-    # --------------------------------------------------------
 
     st.divider()
 
@@ -663,18 +741,28 @@ elif page == "📝 Daily Check-In":
             "heart_rate": heart_rate
         }])
 
-        new_data.to_csv(
-            DATA_FILE,
-            mode="a",
-            header=False,
-            index=False
-        )
+        try:
 
-        st.success(
-            "✅ Today's health data has been saved successfully!"
-        )
+            new_data.to_csv(
+                DATA_FILE,
+                mode="a",
+                header=False,
+                index=False
+            )
 
-        st.rerun()
+            st.success(
+                "✅ Today's health data has been saved successfully!"
+            )
+
+            st.rerun()
+
+        except Exception as e:
+
+            st.error(
+                "❌ Unable to save health data."
+            )
+
+            st.exception(e)
 
 
 # ============================================================
@@ -695,13 +783,10 @@ elif page == "🩺 Find Specialist":
         "This is healthcare navigation, not a medical diagnosis."
     )
 
-    # --------------------------------------------------------
-    # SPECIALIST RECOMMENDATION
-    # --------------------------------------------------------
-
     recommendations = []
 
     if latest["headache"] == 1:
+
         recommendations.append(
             (
                 "Neurologist",
@@ -712,6 +797,7 @@ elif page == "🩺 Find Specialist":
         )
 
     if latest["heart_rate"] > baseline["heart_rate"] + 10:
+
         recommendations.append(
             (
                 "Cardiologist",
@@ -722,6 +808,7 @@ elif page == "🩺 Find Specialist":
         )
 
     if latest["pain"] > 0:
+
         recommendations.append(
             (
                 "Orthopedist",
@@ -732,6 +819,7 @@ elif page == "🩺 Find Specialist":
         )
 
     if latest["sleep_hours"] < baseline["sleep_hours"] - 1:
+
         recommendations.append(
             (
                 "Sleep Specialist",
@@ -741,6 +829,7 @@ elif page == "🩺 Find Specialist":
         )
 
     if latest["energy_level"] < baseline["energy_level"] - 2:
+
         recommendations.append(
             (
                 "General Physician",
@@ -766,7 +855,8 @@ elif page == "🩺 Find Specialist":
     for name, specialty, reason in recommendations:
 
         st.markdown(
-            f"### 🩺 {name}")
+            f"### 🩺 {name}"
+        )
 
         st.write(
             f"**Specialty:** {specialty}"
@@ -777,10 +867,6 @@ elif page == "🩺 Find Specialist":
         )
 
         st.divider()
-
-    # --------------------------------------------------------
-    # WORLDWIDE SEARCH
-    # --------------------------------------------------------
 
     st.header("🌍 Search Specialists Worldwide")
 
@@ -838,7 +924,11 @@ elif page == "🩺 Find Specialist":
 
     if st.button("🔎 Search Specialists"):
 
-        location = city if city.strip() else country
+        location = (
+            city
+            if city.strip()
+            else country
+        )
 
         st.success(
             f"Search criteria created for a "
